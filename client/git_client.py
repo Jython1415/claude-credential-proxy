@@ -216,6 +216,22 @@ class GitProxyClient:
 
         return response.json()['repositories']
 
+    def gh(self, command: str, repo_path: Optional[str] = None) -> Tuple[str, str, int]:
+        """
+        Execute GitHub CLI command
+
+        Args:
+            command: gh command (e.g., "gh pr create --title 'Fix bug'")
+            repo_path: Working directory (defaults to workspace)
+
+        Returns:
+            Tuple of (stdout, stderr, return_code)
+        """
+        if repo_path is None:
+            repo_path = self.workspace
+
+        return self._execute(command, cwd=repo_path)
+
 
 # Convenience functions for direct usage
 _client = None
