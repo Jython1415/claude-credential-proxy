@@ -81,12 +81,13 @@ def git_exec():
         if not encoded_cmd:
             return jsonify({'error': 'missing command'}), 400
 
-        git_cmd = base64.b64decode(encoded_cmd).decode('utf-8')
+        cmd = base64.b64decode(encoded_cmd).decode('utf-8')
 
-        # Security: only allow git commands
-        if not git_cmd.strip().startswith('git '):
-            log_request('/git-exec', 'FORBIDDEN', f'Non-git command: {git_cmd}')
-            return jsonify({'error': 'only git commands allowed'}), 403
+        # Security: only allow git and gh commands
+        allowed_commands = ('git ', 'gh ')
+        if not cmd.strip().startswith(allowed_commands):
+            log_request('/git-exec', 'FORBIDDEN', f'Disallowed command: {cmd}')
+            return jsonify({'error': 'only git and gh commands allowed'}), 403
 
         # Get working directory
         cwd = data.get('cwd', str(WORKSPACE_DIR))
@@ -102,12 +103,12 @@ def git_exec():
         # Ensure directory exists
         cwd_path.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Executing: {git_cmd} in {cwd_path}")
-        log_request('/git-exec', 'EXECUTING', git_cmd)
+        logger.info(f"Executing: {cmd} in {cwd_path}")
+        log_request('/git-exec', 'EXECUTING', cmd)
 
         # Execute command
         result = subprocess.run(
-            git_cmd,
+            cmd,
             shell=True,
             capture_output=True,
             timeout=60,
@@ -125,7 +126,7 @@ def git_exec():
         return jsonify(response)
 
     except subprocess.TimeoutExpired:
-        log_request('/git-exec', 'TIMEOUT', git_cmd)
+        log_request('/git-exec', 'TIMEOUT', cmd)
         return jsonify({'error': 'command timeout'}), 408
 
     except Exception as e:
