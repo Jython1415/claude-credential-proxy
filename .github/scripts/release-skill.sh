@@ -70,17 +70,31 @@ echo "ZIP contents:"
 unzip -l "$BUILD_DIR/$ZIP_NAME"
 
 # Generate release notes
-SKILL_README_CONTENT=$(cat "$SKILL_MD" | tail -n +5)  # Skip frontmatter
 REPO_URL="https://github.com/$REPOSITORY"
 SKILL_URL="$REPO_URL/tree/main/$SKILL_DIR"
 DOWNLOAD_URL="$REPO_URL/releases/download/$TAG/$ZIP_NAME"
+CHANGELOG_FILE="$SKILL_DIR/CHANGELOG.md"
+
+# Extract version-specific changelog
+if [ -f "$CHANGELOG_FILE" ]; then
+    # Extract the section for this version from CHANGELOG.md
+    # Find lines between ## [$VERSION] and the next ## [version] or end of file
+    CHANGELOG_CONTENT=$(awk "/## \[$VERSION\]/{flag=1; next} /## \[/{flag=0} flag" "$CHANGELOG_FILE")
+    if [ -z "$CHANGELOG_CONTENT" ]; then
+        CHANGELOG_CONTENT="See full documentation in SKILL.md"
+    fi
+else
+    CHANGELOG_CONTENT="No changelog available - see full documentation in SKILL.md"
+fi
 
 RELEASE_NOTES=$(cat <<EOF
 # Git Proxy Skill v$VERSION
 
-$SKILL_README_CONTENT
+Clone and push to GitHub repositories from Claude.ai Projects using git bundles and a proxy server.
 
----
+## What's Changed
+
+$CHANGELOG_CONTENT
 
 ## Installation
 
@@ -90,12 +104,9 @@ $SKILL_README_CONTENT
 
 ## Links
 
+- [Full Documentation (SKILL.md)]($SKILL_URL/SKILL.md)
 - [Skill Source Code]($SKILL_URL)
 - [Repository]($REPO_URL)
-
-## Changelog
-
-$(git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 2>/dev/null || echo "")..HEAD 2>/dev/null || echo "Initial release")
 EOF
 )
 
