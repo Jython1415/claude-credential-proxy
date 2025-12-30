@@ -40,14 +40,32 @@ This starts:
 - **Flask proxy** on port 8443 (sessions, proxy, git bundles)
 - **MCP server** on port 10000 (custom connector for Claude.ai)
 
-### 4. Add MCP Custom Connector in Claude.ai
+### 4. Set Up GitHub OAuth
 
-The setup script will print your URL and auth token. In Claude.ai:
+1. Go to https://github.com/settings/developers
+2. Create new OAuth App:
+   - Application name: `Claude Credential Proxy`
+   - Homepage URL: `https://ganymede.tail0410a7.ts.net:10000`
+   - Authorization callback URL: `https://ganymede.tail0410a7.ts.net:10000/oauth/callback`
+3. Generate client secret and add to `.env`:
+   ```
+   GITHUB_CLIENT_ID=<your-client-id>
+   GITHUB_CLIENT_SECRET=<your-client-secret>
+   GITHUB_ALLOWED_USERS=Jython1415  # Your GitHub username(s)
+   BASE_URL=https://ganymede.tail0410a7.ts.net:10000
+   ```
+
+### 5. Add MCP Custom Connector in Claude.ai
+
+The setup script will print your configuration. In Claude.ai:
 
 1. Go to Settings > Connectors > Add Custom Connector
-2. Enter URL: `https://<your-machine>.<tailnet>.ts.net:10000/mcp`
-3. Click "Advanced settings" and enter the authorization token from the setup output
-4. Click "Add"
+2. Enter Name: `Credential Proxy`
+3. Enter URL: `https://ganymede.tail0410a7.ts.net:10000/mcp`
+4. Click "Advanced settings":
+   - OAuth Client ID: (from GitHub OAuth App)
+   - OAuth Client Secret: (from GitHub OAuth App)
+5. Click "Add" - you'll be redirected to GitHub to authorize
 
 **Note:** Port 10000 is used because Tailscale Funnel only allows ports 443, 8443, and 10000.
 
