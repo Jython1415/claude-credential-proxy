@@ -240,22 +240,26 @@ echo "----------------------------------------"
 echo "Setting up Tailscale Funnel"
 echo "----------------------------------------"
 
-# Check if tailscale is available
-if ! command -v tailscale &> /dev/null; then
-    echo "Warning: tailscale command not found"
+# Find tailscale binary (check both PATH and macOS app location)
+TAILSCALE_BIN=$(command -v tailscale 2>/dev/null || echo "/Applications/Tailscale.app/Contents/MacOS/Tailscale")
+
+if [ ! -x "$TAILSCALE_BIN" ]; then
+    echo "Warning: tailscale not found"
     echo "Install Tailscale from https://tailscale.com/download"
-    echo "Then run: tailscale funnel --bg $PROXY_PORT && tailscale funnel --bg $MCP_PORT"
+    echo "Then run: tailscale funnel $PROXY_PORT && tailscale funnel $MCP_PORT"
 else
-    # Set up funnel for both ports
+    echo "Using tailscale at: $TAILSCALE_BIN"
+
+    # Set up funnel for both ports with --bg flag for persistence
     echo "Configuring Tailscale Funnel for port $PROXY_PORT..."
-    tailscale funnel --bg "$PROXY_PORT" 2>/dev/null || echo "  (may already be configured)"
+    "$TAILSCALE_BIN" funnel --https=$PROXY_PORT --bg http://127.0.0.1:$PROXY_PORT 2>&1 | grep -v "Press Ctrl+C" || echo "  (configured)"
 
     echo "Configuring Tailscale Funnel for port $MCP_PORT..."
-    tailscale funnel --bg "$MCP_PORT" 2>/dev/null || echo "  (may already be configured)"
+    "$TAILSCALE_BIN" funnel --https=$MCP_PORT --bg http://127.0.0.1:$MCP_PORT 2>&1 | grep -v "Press Ctrl+C" || echo "  (configured)"
 
     echo ""
     echo "Tailscale Funnel status:"
-    tailscale funnel status 2>/dev/null || echo "  (run 'tailscale funnel status' to check)"
+    "$TAILSCALE_BIN" serve status 2>/dev/null || echo "  (run 'tailscale serve status' to check)"
 fi
 
 # --- Summary ---

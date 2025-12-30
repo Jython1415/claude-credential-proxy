@@ -37,7 +37,8 @@ if not GITHUB_ALLOWED_USERS or GITHUB_ALLOWED_USERS == {''}:
 auth = GitHubProvider(
     client_id=GITHUB_CLIENT_ID,
     client_secret=GITHUB_CLIENT_SECRET,
-    base_url=BASE_URL
+    base_url=BASE_URL,
+    redirect_path="/oauth/callback"  # Match GitHub OAuth App callback URL
 )
 
 # Initialize MCP server with auth
