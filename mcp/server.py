@@ -11,7 +11,9 @@ Authentication: GitHub OAuth with username allowlist
 import os
 import logging
 import httpx
-from mcp.server.fastmcp import FastMCP
+from functools import wraps
+from typing import Callable, Any
+from fastmcp import FastMCP, Context
 from fastmcp.server.auth.providers.github import GitHubProvider
 
 logger = logging.getLogger(__name__)
@@ -20,7 +22,7 @@ logger = logging.getLogger(__name__)
 FLASK_URL = os.environ.get('FLASK_URL', 'http://localhost:8443')
 GITHUB_CLIENT_ID = os.environ.get('GITHUB_CLIENT_ID')
 GITHUB_CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET')
-GITHUB_ALLOWED_USERS = os.environ.get('GITHUB_ALLOWED_USERS', '').split(',')
+GITHUB_ALLOWED_USERS = set(os.environ.get('GITHUB_ALLOWED_USERS', '').split(','))
 BASE_URL = os.environ.get('BASE_URL', 'https://ganymede.tail0410a7.ts.net:10000')
 
 # Validate GitHub OAuth configuration
@@ -28,15 +30,14 @@ if not GITHUB_CLIENT_ID or not GITHUB_CLIENT_SECRET:
     logger.error("GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET must be set!")
     raise ValueError("Missing GitHub OAuth configuration")
 
-if not GITHUB_ALLOWED_USERS or GITHUB_ALLOWED_USERS == ['']:
+if not GITHUB_ALLOWED_USERS or GITHUB_ALLOWED_USERS == {''}:
     logger.warning("No GitHub users in allowlist! Set GITHUB_ALLOWED_USERS")
 
-# Create GitHub auth provider with allowlist
+# Create GitHub auth provider
 auth = GitHubProvider(
     client_id=GITHUB_CLIENT_ID,
     client_secret=GITHUB_CLIENT_SECRET,
-    base_url=BASE_URL,
-    allowed_users=GITHUB_ALLOWED_USERS  # Only these GitHub usernames get access
+    base_url=BASE_URL
 )
 
 # Initialize MCP server with auth
@@ -47,8 +48,31 @@ mcp = FastMCP(
 )
 
 
+def require_allowlist(func: Callable) -> Callable:
+    """Decorator to check if authenticated user is in the allowlist."""
+    @wraps(func)
+    async def wrapper(context: Context, *args, **kwargs) -> Any:
+        # Get authenticated GitHub username
+        user_claims = context.request_context.user
+        github_username = user_claims.get("login", "unknown")
+
+        # Check if user is in allowlist
+        if github_username not in GITHUB_ALLOWED_USERS:
+            logger.warning(f"Access denied for user: {github_username}")
+            return {
+                "error": "Access denied",
+                "message": f"User '{github_username}' is not authorized to use this service"
+            }
+
+        logger.info(f"Authorized user '{github_username}' accessing {func.__name__}")
+        return await func(context, *args, **kwargs)
+
+    return wrapper
+
+
 @mcp.tool()
-async def create_session(services: list[str], ttl_minutes: int = 30) -> dict:
+@require_allowlist
+async def create_session(context: Context, services: list[str], ttl_minutes: int = 30) -> dict:
     """
     Create a new session granting access to specified services.
 
@@ -102,7 +126,8 @@ async def create_session(services: list[str], ttl_minutes: int = 30) -> dict:
 
 
 @mcp.tool()
-async def revoke_session(session_id: str) -> dict:
+@require_allowlist
+async def revoke_session(context: Context, session_id: str) -> dict:
     """
     Revoke an active session immediately.
 
@@ -137,7 +162,8 @@ async def revoke_session(session_id: str) -> dict:
 
 
 @mcp.tool()
-async def list_services() -> dict:
+@require_allowlist
+async def list_services(context: Context) -> dict:
     """
     List all available services that can be included in sessions.
 
@@ -170,11 +196,6 @@ async def list_services() -> dict:
         return {"error": str(e)}
 
 
-def create_app():
-    """Create the ASGI app (FastMCP handles auth middleware automatically)."""
-    return mcp.http_app()
-
-
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
@@ -187,10 +208,8 @@ if __name__ == "__main__":
     logger.info(f"Starting MCP server on port {port}")
     logger.info(f"Flask backend: {FLASK_URL}")
     logger.info(f"Authentication: GitHub OAuth")
-    logger.info(f"Allowed GitHub users: {', '.join(GITHUB_ALLOWED_USERS)}")
+    logger.info(f"Allowed GitHub users: {', '.join(sorted(GITHUB_ALLOWED_USERS))}")
     logger.info(f"OAuth callback URL: {BASE_URL}/oauth/callback")
 
-    # Run with FastMCP's built-in auth
-    import uvicorn
-    app = create_app()
-    uvicorn.run(app, host="127.0.0.1", port=port)
+    # Run with FastMCP's built-in server (handles HTTP transport and auth)
+    mcp.run(transport="http", port=port, host="127.0.0.1")
